@@ -1628,7 +1628,6 @@ sequenceDiagram
     alt principal >= 0 (无债务或有存款)
         Contract-->>Liquidator: 步骤 2a: return false (不能清算)
         Note over Contract: 只有借款人才能被清算<br/>供应者和零余额账户不能被清算
-        deactivate Contract
     else principal < 0 (有债务)
         Note over Contract: 步骤 2b: 继续清算判断流程
         
@@ -1679,8 +1678,9 @@ sequenceDiagram
         
         Contract-->>Liquidator: return true (可清算)
         Note over Contract: 抵押不足，可以被清算
-        deactivate Contract
     end
+    
+    deactivate Contract
     
     Note over Liquidator,Token: === 阶段2：执行清算 ===
     
