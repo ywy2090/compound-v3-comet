@@ -10,6 +10,7 @@ import "./CometMath.sol";
  * @notice Comet 协议的核心抽象合约
  * @dev 继承配置、存储和数学工具，提供核心常量和辅助函数
  * @dev 这是 Comet 和 CometExt 的共同基类
+ * @dev 中文：集中定义核心常量、结构体与会计辅助函数
  */
 abstract contract CometCore is CometConfiguration, CometStorage, CometMath {
     /**

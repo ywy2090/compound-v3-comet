@@ -3,6 +3,11 @@ pragma solidity 0.8.15;
 
 import "./CometExt.sol";
 
+/**
+ * @title CometExtAssetList
+ * @notice Comet 扩展合约的资产列表变体
+ * @dev 中文：用于在扩展合约侧增加可支持资产数量
+ */
 contract CometExtAssetList is CometExt {
 
     /// @notice The address of the asset list factory

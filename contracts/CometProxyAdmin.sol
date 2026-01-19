@@ -8,6 +8,11 @@ interface Deployable {
   function deploy(address cometProxy) external returns (address);
 }
 
+/**
+ * @title CometProxyAdmin
+ * @notice Comet 代理升级管理合约
+ * @dev 中文：用于部署新实现并升级代理，带权限检查
+ */
 contract CometProxyAdmin is ProxyAdmin {
 
     /// @notice MarketAdminPermissionChecker contract which is used to check if the caller has permission to perform market updates(or deployment)

@@ -10,6 +10,7 @@ import "./CometCore.sol";
  * @notice 一个高效的单体化货币市场协议
  * @dev 定义了 Comet 主合约的所有错误、事件和函数接口
  * @dev 实际实现在 Comet.sol 中
+ * @dev 中文：主合约对外接口与事件定义
  * @author Compound
  */
 abstract contract CometMainInterface is CometCore {

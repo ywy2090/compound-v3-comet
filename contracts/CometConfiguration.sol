@@ -5,6 +5,7 @@ pragma solidity 0.8.15;
  * @title Compound's Comet Configuration Interface
  * @title Compound Comet 配置接口
  * @dev 定义了 Comet 协议的配置数据结构
+ * @dev 中文：部署与参数配置的数据结构集合
  * @author Compound
  */
 contract CometConfiguration {

@@ -6,6 +6,7 @@ pragma solidity 0.8.15;
  * @title Compound Comet 数学运算合约
  * @dev Pure math functions
  * @dev 纯数学函数，用于安全的类型转换和数值操作
+ * @dev 中文：提供安全的数值转换与基础算术工具
  * @author Compound
  */
 contract CometMath {

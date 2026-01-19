@@ -6,6 +6,7 @@ import "./CometCore.sol";
 /**
  * @title Compound's Comet Ext Interface
  * @notice An efficient monolithic money market protocol
+ * @dev 中文：扩展合约接口，包含 ERC20 与签名授权等功能
  * @author Compound
  */
 abstract contract CometExtInterface is CometCore {

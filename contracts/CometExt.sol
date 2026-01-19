@@ -13,6 +13,7 @@ import "./CometExtInterface.sol";
  * @dev 2. 名称和符号查询
  * @dev 3. EIP-712 签名授权
  * @dev 4. 各种查询接口
+ * @dev 中文：主合约的功能扩展与查询聚合入口
  */
 contract CometExt is CometExtInterface {
     // ============ 公共常量 ============

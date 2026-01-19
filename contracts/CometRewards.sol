@@ -11,6 +11,7 @@ import "./ERC20.sol";
  * @notice 持有并分发代币奖励（通常是 COMP 代币）
  * @dev 独立于 Comet 主合约，负责管理和分发协议激励奖励
  * @dev 每个 Comet 市场可以配置不同的奖励代币和参数
+ * @dev 中文：奖励领取与配置管理入口
  * @author Compound
  */
 contract CometRewards {

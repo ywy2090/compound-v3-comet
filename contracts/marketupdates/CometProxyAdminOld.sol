@@ -9,6 +9,7 @@ interface Deployable {
 
 /**
  * @dev This contract is just to simulate the full deployment process of market updates. Should be deleted after the market updates are deployed.
+ * @dev 中文：旧版本代理管理员，仅用于市场更新流程模拟
  */
 contract CometProxyAdminOld is ProxyAdmin {
 

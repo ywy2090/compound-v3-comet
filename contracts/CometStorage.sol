@@ -7,6 +7,7 @@ pragma solidity 0.8.15;
  * @dev Versions can enforce append-only storage slots via inheritance.
  * @dev 通过继承可以强制执行仅追加的存储槽，确保升级兼容性
  * @dev 所有存储变量都经过精心设计，使用紧凑打包以节省 gas
+ * @dev 中文：集中定义核心存储布局，保持升级安全
  * @author Compound
  */
 contract CometStorage {
@@ -102,7 +103,7 @@ contract CometStorage {
     /// @notice 用户授权映射
     /// @dev 映射：所有者地址 => 管理者地址 => 是否授权
     /// @dev 允许用户授权其他地址管理自己的账户（如智能合约钱包）
-    mapping(address => mapping(address => bool)) public isAllowed;
+    mapping(address => mapping(address => bool)) public ;
 
     /// @notice 用户签名授权的 nonce
     /// @dev 映射：用户地址 => nonce
