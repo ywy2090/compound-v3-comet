@@ -1,0 +1,353 @@
+@startuml Comet类图
+!theme plain
+skinparam linetype ortho
+skinparam backgroundColor #FEFEFE
+skinparam class {
+    BackgroundColor<<main>> #E8F5E9
+    BackgroundColor<<interface>> #E3F2FD
+    BackgroundColor<<storage>> #FFF3E0
+    BackgroundColor<<util>> #F3E5F5
+    BorderColor #666666
+    ArrowColor #666666
+}
+
+title Compound V3 Comet 核心类图\n(Comet Core Class Diagram)
+
+' ============================================
+' 主合约 Comet
+' ============================================
+class Comet <<main>> {
+    **核心借贷合约 - 实现所有借贷功能**
+    --不可变配置参数--
+    + {static} governor: address
+    + {static} pauseGuardian: address
+    + {static} baseToken: address
+    + {static} baseTokenPriceFeed: address
+    + {static} extensionDelegate: address
+    --利率模型参数--
+    + {static} supplyKink: uint64
+    + {static} borrowKink: uint64
+    + {static} supplyPerSecondInterestRateSlopeLow: uint64
+    + {static} supplyPerSecondInterestRateSlopeHigh: uint64
+    + {static} borrowPerSecondInterestRateSlopeLow: uint64
+    + {static} borrowPerSecondInterestRateSlopeHigh: uint64
+    --资产配置--
+    + {static} numAssets: uint8
+    + {static} assetInfo[]: AssetInfo[]
+    ==核心功能函数==
+    + supply(asset, amount)
+    + supplyTo(dst, asset, amount)
+    + supplyFrom(from, dst, asset, amount)
+    + withdraw(asset, amount)
+    + withdrawTo(to, asset, amount)
+    + withdrawFrom(src, to, asset, amount)
+    --借贷功能--
+    + {abstract} borrow(amount)
+    + {abstract} repay(amount)
+    --清算功能--
+    + {abstract} absorb(absorber, accounts[])
+    + {abstract} buyCollateral(asset, minAmount, baseAmount, recipient)
+    --账户查询--
+    + {abstract} getAssetInfo(i): AssetInfo
+    + {abstract} getAssetInfoByAddress(asset): AssetInfo
+    + {abstract} balanceOf(account): uint256
+    + {abstract} borrowBalanceOf(account): uint256
+    + {abstract} isLiquidatable(account): bool
+}
+
+' ============================================
+' 抽象接口层
+' ============================================
+abstract class CometMainInterface <<interface>> {
+    **主接口 - 定义核心功能**
+    ==错误定义 (Errors)==
+    + {abstract} Absurd()
+    + {abstract} AlreadyInitialized()
+    + {abstract} BadAsset()
+    + {abstract} BadPrice()
+    + {abstract} NotCollateralized()
+    + {abstract} NotLiquidatable()
+    + {abstract} InsufficientReserves()
+    ==事件定义 (Events)==
+    + {abstract} Supply(from, dst, amount)
+    + {abstract} Transfer(from, to, amount)
+    + {abstract} Withdraw(src, to, amount)
+    + {abstract} SupplyCollateral(from, dst, asset, amount)
+    + {abstract} TransferCollateral(from, to, asset, amount)
+    + {abstract} WithdrawCollateral(src, to, asset, amount)
+    + {abstract} AbsorbDebt(absorber, borrower, basePaidOut, usdValue)
+    + {abstract} AbsorbCollateral(absorber, borrower, asset, collateralAbsorbed, usdValue)
+    + {abstract} BuyCollateral(buyer, asset, baseAmount, collateralAmount)
+    ==核心函数声明==
+    + {abstract} supply(asset, amount)
+    + {abstract} withdraw(asset, amount)
+    + {abstract} absorb(absorber, accounts[])
+    + {abstract} buyCollateral(asset, minAmount, baseAmount, recipient)
+    + {abstract} quoteCollateral(asset, baseAmount): uint
+    + {abstract} getUtilization(): uint
+    + {abstract} getSupplyRate(utilization): uint64
+    + {abstract} getBorrowRate(utilization): uint64
+}
+
+abstract class CometCore <<interface>> {
+    **核心基类 - 聚合基础组件**
+    ==常量定义==
+    + {static} FACTOR_SCALE: uint64 = 1e18
+    + {static} MAX_ASSETS: uint8 = 15
+    + {static} BASE_ASSET_OFFSET: uint8 = 0
+    + {static} BASE_INDEX_SCALE: uint64 = 1e15
+    ==AssetInfo 结构体==
+    offset, asset, priceFeed, scale
+    borrowCF, liquidateCF
+    liquidationFactor, supplyCap
+    ==辅助函数==
+    + {abstract} presentValue(principalValue_): int104
+    + {abstract} principalValue(presentValue_): int104
+    + {abstract} presentValueSupply(baseSupplyIndex_, principalValue_): uint104
+    + {abstract} presentValueBorrow(baseBorrowIndex_, principalValue_): uint104
+}
+
+' ============================================
+' 基础组件类
+' ============================================
+class CometConfiguration <<util>> {
+    **配置数据结构**
+    ==Configuration 结构体==
+    + governor: address
+    + pauseGuardian: address
+    + baseToken: address
+    + baseTokenPriceFeed: address
+    + extensionDelegate: address
+    + supplyKink: uint64
+    + borrowKink: uint64
+    + storeFrontPriceFactor: uint64
+    + trackingIndexScale: uint64
+    + baseTrackingSupplySpeed: uint64
+    + baseTrackingBorrowSpeed: uint64
+    + baseMinForRewards: uint104
+    + baseBorrowMin: uint104
+    + targetReserves: uint104
+    + assetConfigs: AssetConfig[]
+    ==AssetConfig 结构体==
+    + asset: address
+    + priceFeed: address
+    + decimals: uint8
+    + borrowCollateralFactor: uint64
+    + liquidateCollateralFactor: uint64
+    + liquidationFactor: uint64
+    + supplyCap: uint128
+    ==ExtConfiguration 结构体==
+    + name32: bytes32
+    + symbol32: bytes32
+}
+
+class CometStorage <<storage>> {
+    **存储布局**
+    ==全局状态变量==
+    # baseSupplyIndex: uint64
+    # baseBorrowIndex: uint64
+    # trackingSupplyIndex: uint64
+    # trackingBorrowIndex: uint64
+    # totalSupplyBase: uint104
+    # totalBorrowBase: uint104
+    # lastAccrualTime: uint40
+    # pauseFlags: uint8
+    ==映射存储==
+    + totalsCollateral: mapping(address => TotalsCollateral)
+    + isAllowed: mapping(address => mapping(address => bool))
+    + userNonce: mapping(address => uint)
+    + userBasic: mapping(address => UserBasic)
+    + userCollateral: mapping(address => mapping(address => UserCollateral))
+    + liquidatorPoints: mapping(address => LiquidatorPoints)
+    ==TotalsBasic 结构==
+    baseSupplyIndex, baseBorrowIndex
+    trackingSupplyIndex, trackingBorrowIndex
+    totalSupplyBase, totalBorrowBase
+    lastAccrualTime, pauseFlags
+    ==TotalsCollateral 结构==
+    totalSupplyAsset, _reserved
+    ==UserBasic 结构==
+    principal, baseTrackingIndex
+    baseTrackingAccrued, assetsIn, _reserved
+    ==UserCollateral 结构==
+    balance, _reserved
+    ==LiquidatorPoints 结构==
+    numAbsorbs, numAbsorbed
+    approxSpend, _reserved
+}
+
+class CometMath <<util>> {
+    **数学工具库**
+    ==数学常量==
+    + {static} MAX_INT104: int = 2^103 - 1
+    + {static} MAX_INT256: int = 2^255 - 1
+    + {static} MAX_UINT104: uint = 2^104 - 1
+    + {static} MAX_UINT128: uint = 2^128 - 1
+    + {static} MAX_UINT256: uint = 2^256 - 1
+    ==数学函数==
+    # {static} safe64(n: uint): uint64
+    # {static} safe104(n: uint): uint104
+    # {static} safe128(n: uint): uint128
+    # {static} signed104(n: uint): int104
+    # {static} signed256(n: uint): int256
+    # {static} unsigned104(n: int): uint104
+    # {static} unsigned256(n: int): uint256
+    # {static} mul(a: uint64, b: uint64): uint128
+    # {static} mul(a: uint64, b: uint128): uint
+    # {static} div(a: uint64, b: uint64): uint64
+}
+
+' ============================================
+' 外部接口
+' ============================================
+interface IERC20NonStandard <<interface>> {
+    **ERC20 非标准接口**
+    + transfer(to, amount)
+    + transferFrom(from, to, amount)
+    + balanceOf(account): uint256
+    + approve(spender, amount)
+}
+
+interface IPriceFeed <<interface>> {
+    **价格预言机接口**
+    + decimals(): uint8
+    + description(): string
+    + version(): uint256
+    + latestRoundData(): (roundId, answer, startedAt, updatedAt, answeredInRound)
+    + price(symbol): uint256
+}
+
+' ============================================
+' 扩展合约
+' ============================================
+class CometExt <<main>> {
+    **扩展功能合约**
+    通过 delegatecall 提供额外功能
+    ==ERC20 函数==
+    + name(): string
+    + symbol(): string
+    + approve(spender, amount): bool
+    + allowance(owner, spender): uint256
+    ==授权管理==
+    + allow(manager, isAllowed_)
+    + allowBySig(owner, manager, isAllowed_, nonce, expiry, signature)
+    ==查询函数==
+    + collateralBalanceOf(account, asset): uint128
+    + baseTrackingAccrued(account): uint64
+    + baseAccrualScale(): uint64
+    + baseIndexScale(): uint64
+}
+
+abstract class CometExtInterface <<interface>> {
+    **扩展接口定义**
+    + {abstract} name(): string
+    + {abstract} symbol(): string
+    + {abstract} approve(spender, amount): bool
+    + {abstract} allowance(owner, spender): uint256
+    + {abstract} allow(manager, isAllowed_)
+}
+
+' ============================================
+' 工厂合约
+' ============================================
+class CometFactory {
+    **Comet 工厂合约**
+    负责部署新的 Comet 实例
+    + clone(config: Configuration): address
+}
+
+class Configurator {
+    **配置管理器**
+    管理 Comet 市场配置
+    --配置管理--
+    + governor: address
+    + factory: mapping(address => address)
+    + configuratorParams: mapping(address => Configuration)
+    --功能函数--
+    + setFactory(cometProxy, newFactory)
+    + setConfiguration(cometProxy, newConfiguration)
+    + deploy(cometProxy): address
+    + setGovernor(cometProxy, newGovernor)
+    + updateAssetSupplyCap(cometProxy, asset, newSupplyCap)
+    + updateAssetBorrowCollateralFactor(cometProxy, asset, newBorrowCF)
+}
+
+' ============================================
+' 继承关系
+' ============================================
+CometMainInterface --|> CometCore : 继承
+CometCore --|> CometConfiguration : 继承
+CometCore --|> CometStorage : 继承
+CometCore --|> CometMath : 继承
+
+Comet ..|> CometMainInterface : 实现
+CometExt ..|> CometExtInterface : 实现
+CometExtInterface --|> CometCore : 继承
+
+' ============================================
+' 依赖关系
+' ============================================
+Comet ..> IERC20NonStandard : 使用 (资产代币)
+Comet ..> IPriceFeed : 使用 (价格预言机)
+Comet --> CometExt : delegatecall 调用
+CometFactory ..> Comet : 创建实例
+Configurator --> CometFactory : 使用
+Configurator ..> Comet : 配置
+
+' ============================================
+' 关键说明
+' ============================================
+note right of Comet
+  **Comet 是 Compound V3 的核心合约**
+  
+  主要功能：
+  • 供应 (Supply): 存入基础资产/抵押品
+  • 取款 (Withdraw): 提取资产
+  • 借贷 (Borrow): 抵押借款
+  • 还款 (Repay): 归还借款
+  • 清算 (Absorb): 清算不良债务
+  • 购买抵押品 (BuyCollateral): 折价购买
+  
+  设计特点：
+  • 单体化架构 (Monolithic)
+  • Gas 高度优化
+  • 使用不可变变量减少读取成本
+  • 紧凑的存储布局
+end note
+
+note left of CometStorage
+  **存储优化策略**
+  
+  • 使用紧凑打包 (Tight Packing)
+  • TotalsBasic 仅占 2 个存储槽
+  • UserBasic 仅占 1 个存储槽
+  • 位标志 (assetsIn) 节省空间
+  • principal 使用有符号整数
+    (正数=供应, 负数=借贷)
+end note
+
+note right of CometConfiguration
+  **配置参数说明**
+  
+  利率模型：双斜率 Kink 模型
+  • Kink: 利率曲线拐点 (通常 80%)
+  • SlopeLow: 拐点前斜率
+  • SlopeHigh: 拐点后斜率
+  
+  风险参数：
+  • borrowCF: 借款抵押率
+  • liquidateCF: 清算阈值
+  • liquidationFactor: 清算惩罚
+  • supplyCap: 供应上限
+end note
+
+note left of CometMath
+  **数学工具**
+  
+  提供安全的类型转换和数学运算
+  防止溢出和下溢
+  
+  所有转换都进行边界检查
+end note
+
+@enduml
