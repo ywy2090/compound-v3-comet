@@ -1,0 +1,314 @@
+@startuml  CometMainInterface 实现对比
+!theme plain
+
+title Compound V3 - 三个 CometMainInterface 实现合约对比
+
+' ==================== 共同基类 ====================
+
+package "共同基础架构" {
+  abstract class CometMainInterface {
+    + supply()
+    + withdraw()
+    + borrow()
+    + repay()
+    + absorb()
+    + buyCollateral()
+    --
+    继承自 CometCore
+  }
+  
+  abstract class CometCore {
+    # presentValue()
+    # principalValue()
+    # getPrice()
+    # isBorrowCollateralized()
+    # isLiquidatable()
+    --
+    继承 CometConfiguration
+    继承 CometStorage
+    继承 CometMath
+  }
+  
+  CometMainInterface --|> CometCore
+}
+
+' ==================== 三个实现 ====================
+
+package "实现 1: 标准版" #LightBlue {
+  class Comet {
+    **资产限制**
+    + MAX_ASSETS = 15
+    
+    **资产存储 (内部)**
+    - asset00_a: uint256
+    - asset00_b: uint256
+    - asset01_a: uint256
+    - asset01_b: uint256
+    ... asset02 ~ asset14
+    - numAssets: uint8
+    
+    **位标志系统**
+    - assetsIn: uint16 (16位)
+    - _reserved: uint8 (未使用)
+    
+    **ERC20 接口**
+    使用 IERC20NonStandard
+    
+    **核心方法**
+    + getAssetInfo(i)
+    + isInAsset(assetsIn, offset)
+    + updateAssetsIn(account, asset)
+    
+    --
+    <b>特点</b>
+    ✅ Gas 效率最高
+    ✅ 简单可靠
+    ✅ 兼容非标准 ERC20
+    ❌ 最多 15 个资产
+    
+    <b>合约大小</b>
+    ~24 KB
+    
+    <b>适用场景</b>
+    主流 EVM 链，标准市场
+  }
+  
+  Comet --|> CometMainInterface
+}
+
+package "实现 2: 扩展资产版" #LightGreen {
+  class CometWithExtendedAssetList {
+    **资产限制**
+    + MAX_ASSETS = 24
+    
+    **资产存储 (外部)**
+    - assetList: address
+    - numAssets: uint8
+    
+    **位标志系统**
+    - assetsIn: uint16 (0-15)
+    - _reserved: uint8 (16-23) ✅ 使用
+    
+    **ERC20 接口**
+    使用 IERC20NonStandard
+    
+    **核心方法**
+    + getAssetInfo(i)
+      └─ IAssetList(assetList).getAssetInfo(i)
+    + isInAsset(assetsIn, offset, _reserved)
+    + updateAssetsIn(account, asset)
+    
+    --
+    <b>特点</b>
+    ✅ 支持 16-24 个资产
+    ✅ 主合约更小
+    ✅ 职责分离
+    ⚠️ Gas 稍高（外部调用）
+    ⚠️ 部署复杂
+    
+    <b>合约大小</b>
+    ~20 KB (主) + 8 KB (AssetList)
+    
+    <b>适用场景</b>
+    需要更多抵押资产的市场
+  }
+  
+  CometWithExtendedAssetList --|> CometMainInterface
+  
+  class AssetList {
+    **资产存储 (24 个)**
+    - asset00_a: uint256
+    - asset00_b: uint256
+    ... asset01 ~ asset23
+    
+    **方法**
+    + getAssetInfo(i)
+    
+    --
+    <b>作用</b>
+    存储扩展的资产配置
+    减少主合约大小
+  }
+  
+  CometWithExtendedAssetList --> AssetList : 委托读取
+}
+
+package "实现 3: Scroll 专用版" #LightYellow {
+  class ScrollComet {
+    **资产限制**
+    + MAX_ASSETS = 15
+    
+    **资产存储 (内部)**
+    - asset00_a: uint256
+    - asset00_b: uint256
+    - asset01_a: uint256
+    - asset01_b: uint256
+    ... asset02 ~ asset14
+    - numAssets: uint8
+    
+    **位标志系统**
+    - assetsIn: uint16 (16位)
+    - _reserved: uint8 (未使用)
+    
+    **ERC20 接口**
+    使用标准 ERC20 ⚡
+    
+    **核心方法**
+    + getAssetInfo(i)
+    + isInAsset(assetsIn, offset)
+    + updateAssetsIn(account, asset)
+    + doTransferIn/Out() 优化
+    
+    --
+    <b>特点</b>
+    ✅ Scroll 链专用优化
+    ✅ 标准 ERC20 (Gas 更低)
+    ✅ 合约最小
+    ❌ 不兼容非标准代币
+    ❌ 最多 15 个资产
+    
+    <b>合约大小</b>
+    ~20 KB
+    
+    <b>适用场景</b>
+    Scroll 链或新 L2 链
+  }
+  
+  ScrollComet --|> CometMainInterface
+}
+
+' ==================== 详细对比 ====================
+
+note as ComparisonNote
+  <b>三个实现的核心区别</b>
+  
+  |= 特性 |= Comet.sol |= CometWithExtended... |= ScrollComet.sol |
+  | <b>最大资产数</b> | 15 | <color:red><b>24</b></color> | 15 |
+  | <b>资产存储</b> | 内部 | <color:red>外部 AssetList</color> | 内部 |
+  | <b>ERC20 接口</b> | NonStandard | NonStandard | <color:red>Standard</color> |
+  | <b>合约大小</b> | 24 KB | 20 KB + 8 KB | <color:green>20 KB</color> |
+  | <b>Gas 效率</b> | <color:green>最高</color> | 中等 | <color:green>最高</color> |
+  | <b>部署复杂度</b> | <color:green>简单</color> | 复杂 | <color:green>简单</color> |
+  | <b>目标链</b> | 通用 | 通用 | <color:red>Scroll</color> |
+  
+  <b>位标志系统差异</b>
+  
+  <b>Comet.sol & ScrollComet.sol:</b>
+  • assetsIn: uint16 (使用 0-15 位)
+  • _reserved: uint8 (未使用)
+  
+  <b>CometWithExtendedAssetList.sol:</b>
+  • assetsIn: uint16 (使用 0-15 位，资产 0-15)
+  • _reserved: uint8 (使用 0-7 位，资产 16-23)
+end note
+
+' ==================== 使用场景决策树 ====================
+
+note as DecisionTree
+  <b>使用场景决策树</b>
+  
+  部署在 Scroll 链?
+  ├─ <color:green>是</color> → <b>ScrollComet.sol</b>
+  │          理由: 专门优化，Gas 最低
+  │
+  └─ <color:red>否</color> → 需要多少个抵押资产?
+             ├─ <color:green>≤ 15 个</color> → <b>Comet.sol</b>
+             │              理由: 标准版，Gas 最优
+             │
+             └─ <color:red>16-24 个</color> → <b>CometWithExtendedAssetList.sol</b>
+                            理由: 唯一支持
+end note
+
+ComparisonNote -[hidden]-> DecisionTree
+
+' ==================== ERC20 接口差异 ====================
+
+package "ERC20 接口差异" {
+  interface IERC20NonStandard {
+    + transferFrom(from, to, amount)
+    + transfer(to, amount)
+    + balanceOf(account): uint256
+    --
+    <b>特点</b>
+    • 不保证返回 bool
+    • 兼容 USDT 等旧代币
+    • 需要汇编检查返回值
+  }
+  
+  interface ERC20 {
+    + transferFrom(from, to, amount): bool
+    + transfer(to, amount): bool
+    + balanceOf(account): uint256
+    --
+    <b>特点</b>
+    • 标准 ERC20
+    • 必须返回 bool
+    • Gas 成本更低
+  }
+  
+  Comet ..> IERC20NonStandard : 使用
+  CometWithExtendedAssetList ..> IERC20NonStandard : 使用
+  ScrollComet ..> ERC20 : 使用
+}
+
+' ==================== Gas 成本对比 ====================
+
+note as GasCost
+  <b>Gas 成本对比（每次操作）</b>
+  
+  <b>getAssetInfo():</b>
+  • Comet.sol: ~100-200 gas
+    └─ 直接读取 immutable
+  • CometWithExtendedAssetList: ~2,500-3,000 gas
+    └─ 外部调用 AssetList
+  • ScrollComet.sol: ~100-200 gas
+    └─ 直接读取 immutable
+  
+  <b>doTransferIn():</b>
+  • Comet.sol: ~24,500 gas
+    └─ NonStandard + 汇编检查
+  • CometWithExtendedAssetList: ~24,500 gas
+    └─ NonStandard + 汇编检查
+  • ScrollComet.sol: ~23,000 gas
+    └─ 标准 ERC20，无需额外检查
+  
+  <b>supply() 完整流程:</b>
+  • Comet.sol: ~150,000 gas (最优)
+  • CometWithExtendedAssetList: ~153,000 gas (+3k)
+  • ScrollComet.sol: ~148,000 gas (最优)
+end note
+
+GasCost -[hidden]-> IERC20NonStandard
+
+' ==================== 资产信息打包 ====================
+
+note as AssetPacking
+  <b>资产信息打包格式（所有版本相同）</b>
+  
+  每个资产占用 2 个 uint256 (512 位):
+  
+  <b>word_a (256 位):</b>
+  ┌─────────────────────────────────────────┐
+  │ Bit 0-159  : asset (address)           │
+  │ Bit 160-223: borrowCollateralFactor    │
+  │ Bit 224-255: liquidateCollateralFactor │
+  └─────────────────────────────────────────┘
+  
+  <b>word_b (256 位):</b>
+  ┌─────────────────────────────────────────┐
+  │ Bit 0-31   : liquidationFactor         │
+  │ Bit 32-191 : priceFeed (address)       │
+  │ Bit 192-199: decimals                  │
+  │ Bit 200-255: supplyCap                 │
+  └─────────────────────────────────────────┘
+  
+  <b>存储位置差异:</b>
+  • Comet.sol: 内部 (asset00_a/b ~ asset14_a/b)
+  • CometWithExtendedAssetList: 外部 AssetList
+    (asset00_a/b ~ asset23_a/b)
+  • ScrollComet.sol: 内部 (asset00_a/b ~ asset14_a/b)
+end note
+
+AssetPacking -[hidden]-> GasCost
+
+@enduml
